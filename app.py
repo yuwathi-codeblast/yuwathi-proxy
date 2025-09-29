@@ -27,7 +27,16 @@ import requests
 import base64
 import json
 import logging
+import ssl
+import os
 from urllib.parse import urlparse
+
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -139,6 +148,44 @@ def proxy():
 
     return jsonify(out), 200
 
+def create_ssl_context():
+    """Create SSL context for HTTPS support."""
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    
+    # Try to load SSL certificates from environment variables or default paths
+    cert_file = os.getenv('SSL_CERT_PATH', 'cert.pem')
+    key_file = os.getenv('SSL_KEY_PATH', 'key.pem')
+    
+    if os.path.exists(cert_file) and os.path.exists(key_file):
+        try:
+            context.load_cert_chain(cert_file, key_file)
+            logging.info(f"SSL certificates loaded from {cert_file} and {key_file}")
+            return context
+        except Exception as e:
+            logging.error(f"Failed to load SSL certificates: {e}")
+            return None
+    else:
+        logging.warning("SSL certificate files not found. Please create SSL certificates.")
+        logging.info("To create self-signed certificates, run:")
+        logging.info("openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes")
+        return None
+
 if __name__ == "__main__":
-    # WARNING: Do not run this unprotected on a public IP.
-    app.run(host="127.0.0.1", port=8000, debug=False)
+    # Configuration from environment variables
+    host = os.getenv('HOST', '0.0.0.0')  # Changed to accept external connections
+    port = int(os.getenv('PORT', '8000'))
+    use_https = os.getenv('USE_HTTPS', 'true').lower() == 'true'
+    debug = os.getenv('DEBUG', 'false').lower() == 'true'
+    
+    if use_https:
+        ssl_context = create_ssl_context()
+        if ssl_context:
+            logging.info(f"Starting HTTPS server on {host}:{port}")
+            app.run(host=host, port=port, debug=debug, ssl_context=ssl_context)
+        else:
+            logging.error("Cannot start HTTPS server without valid SSL certificates.")
+            logging.info("Falling back to HTTP server.")
+            app.run(host=host, port=port, debug=debug)
+    else:
+        logging.info(f"Starting HTTP server on {host}:{port}")
+        app.run(host=host, port=port, debug=debug)
