@@ -46,8 +46,24 @@ openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -node
 # Simple start
 python app.py
 
-# Or use the PowerShell script (Windows)
+# Or use setup scripts:
+# Windows PowerShell:
 .\setup-https.ps1 -InstallDeps -GenerateCert -Start
+
+# Linux/Unix:
+chmod +x setup-https.sh
+./setup-https.sh -i -c -s
+```
+
+### Alternative: Automated Setup (Linux)
+
+```bash
+# Install system dependencies (Ubuntu/Debian/CentOS/Fedora)
+chmod +x install-deps.sh setup-https.sh
+./install-deps.sh
+
+# Full setup: install deps, generate certs, start server
+./setup-https.sh -i -c -s
 ```
 
 The server will start on `https://0.0.0.0:8000`
@@ -157,18 +173,12 @@ gunicorn --bind 0.0.0.0:443 \
          app:app
 ```
 
-### Using Docker
-```dockerfile
-FROM python:3.11-slim
+### Using Systemd Service (Linux)
+```bash
+# Use the provided installation script
+./install-deps.sh
 
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-EXPOSE 8000
-
-CMD ["python", "app.py"]
+# Or create manually - see LINUX-DEPLOYMENT.md for details
 ```
 
 ## 🛡️ Security
@@ -190,15 +200,20 @@ CMD ["python", "app.py"]
 
 ```
 yuwathi-proxy/
-├── app.py                 # Main application
-├── requirements.txt       # Python dependencies
-├── generate_ssl_cert.py   # SSL certificate generator
-├── setup-https.ps1       # Windows setup script
-├── test_https.py         # Test suite
-├── .env.example          # Configuration template
-├── README.md            # This file
-├── README-HTTPS.md      # Detailed HTTPS setup guide
-└── .gitignore           # Git ignore rules
+├── app.py                      # Main application
+├── requirements.txt            # Python dependencies
+├── generate_ssl_cert.py        # SSL certificate generator
+├── setup-https.ps1            # Windows setup script
+├── setup-https.sh             # Linux/Unix setup script
+├── install-deps.sh            # Linux system dependencies installer
+├── test_https.py              # Test suite
+├── .env.example               # Configuration template
+├── README.md                  # This file
+├── README-HTTPS.md            # Detailed HTTPS setup guide
+├── LINUX-DEPLOYMENT.md        # Linux deployment guide
+├── SHELL-SCRIPTS.md           # Shell script documentation
+├── SECURITY.md                # Security guidelines
+└── .gitignore                 # Git ignore rules
 ```
 
 ## 🤝 Contributing
