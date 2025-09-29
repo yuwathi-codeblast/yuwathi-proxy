@@ -313,8 +313,9 @@ sudo systemctl restart nginx
 
 ### Test HTTPS Connectivity
 
+#### Local Testing
 ```bash
-# Test with curl
+# Test with curl (local)
 curl -k -X POST https://localhost:8000/yuwathi/proxy \
   -H "Content-Type: application/json" \
   -d '{"URL": "https://httpbin.org/get", "method": "GET"}'
@@ -325,6 +326,231 @@ curl -k -X POST https://localhost:8000/yuwathi/proxy \
 # Or manually
 source venv/bin/activate
 python test_https.py
+```
+
+#### External Access Testing
+
+To allow requests from outside your server, you need to:
+
+1. **Find your server's external IP:**
+```bash
+# Get public IP
+curl ifconfig.me
+# Or
+curl ipinfo.io/ip
+
+# Get local network IP
+hostname -I | awk '{print $1}'
+# Or
+ip route get 1 | awk '{print $NF;exit}'
+```
+
+2. **Configure server to accept external connections:**
+```bash
+# Start server on all interfaces (0.0.0.0)
+./setup-https.sh -s -h 0.0.0.0 -p 8000
+
+# Or set environment variable
+export HOST=0.0.0.0
+export PORT=8000
+python app.py
+```
+
+3. **Configure firewall to allow external access:**
+```bash
+# Ubuntu/Debian (UFW)
+sudo ufw allow 8000/tcp
+sudo ufw enable
+
+# CentOS/RHEL/Fedora (firewalld)
+sudo firewall-cmd --permanent --add-port=8000/tcp
+sudo firewall-cmd --reload
+
+# Or using iptables
+sudo iptables -A INPUT -p tcp --dport 8000 -j ACCEPT
+```
+
+### Making Requests from External Clients
+
+#### From Another Linux Machine
+```bash
+# Replace YOUR_SERVER_IP with actual server IP
+curl -k -X POST https://YOUR_SERVER_IP:8000/yuwathi/proxy \
+  -H "Content-Type: application/json" \
+  -d '{
+    "URL": "https://api.github.com/zen",
+    "method": "GET"
+  }'
+
+# Example with specific IP
+curl -k -X POST https://192.168.1.100:8000/yuwathi/proxy \
+  -H "Content-Type: application/json" \
+  -d '{
+    "URL": "https://httpbin.org/post",
+    "method": "POST",
+    "header": {"Content-Type": "application/json"},
+    "data": {"message": "Hello from external client"}
+  }'
+```
+
+#### From Windows PowerShell
+```powershell
+# Disable SSL verification for self-signed certificates
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+
+# Make request
+$headers = @{'Content-Type' = 'application/json'}
+$body = @{
+    'URL' = 'https://api.github.com/zen'
+    'method' = 'GET'
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "https://YOUR_SERVER_IP:8000/yuwathi/proxy" -Method POST -Headers $headers -Body $body
+```
+
+#### From Python Script
+```python
+import requests
+import urllib3
+
+# Disable SSL warnings for self-signed certificates
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Your server's IP address
+server_ip = "YOUR_SERVER_IP"  # Replace with actual IP
+
+# Make request
+response = requests.post(
+    f"https://{server_ip}:8000/yuwathi/proxy",
+    json={
+        "URL": "https://httpbin.org/get",
+        "method": "GET",
+        "header": {
+            "User-Agent": "External-Client-Test"
+        }
+    },
+    verify=False  # Skip SSL verification for self-signed certs
+)
+
+print(f"Status: {response.status_code}")
+print(f"Response: {response.json()}")
+```
+
+#### From Web Browser / JavaScript
+```javascript
+// Note: Browsers will show security warnings for self-signed certificates
+// You'll need to accept the certificate first by visiting https://YOUR_SERVER_IP:8000
+
+fetch('https://YOUR_SERVER_IP:8000/yuwathi/proxy', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+        'URL': 'https://api.github.com/zen',
+        'method': 'GET'
+    })
+})
+.then(response => response.json())
+.then(data => console.log(data))
+.catch(error => console.error('Error:', error));
+```
+
+### Network Configuration for External Access
+
+#### Cloud Servers (AWS, GCP, Azure, etc.)
+```bash
+# 1. Configure security groups/firewall rules in cloud console
+#    Allow inbound TCP traffic on port 8000 (or your chosen port)
+
+# 2. Check if cloud firewall allows the port
+# AWS: Security Groups
+# GCP: Firewall Rules  
+# Azure: Network Security Groups
+
+# 3. Get public IP
+curl ifconfig.me
+
+# 4. Test from external machine
+curl -k -X POST https://PUBLIC_IP:8000/yuwathi/proxy \
+  -H "Content-Type: application/json" \
+  -d '{"URL": "https://httpbin.org/get", "method": "GET"}'
+```
+
+#### Home/Office Network
+```bash
+# 1. Configure router port forwarding
+#    Forward external port 8000 to internal server IP:8000
+
+# 2. Find your public IP
+curl ifconfig.me
+
+# 3. Test from outside your network
+curl -k -X POST https://PUBLIC_IP:8000/yuwathi/proxy \
+  -H "Content-Type: application/json" \
+  -d '{"URL": "https://httpbin.org/get", "method": "GET"}'
+```
+
+### Domain Name Setup (Optional)
+
+#### Using a Domain Name
+```bash
+# 1. Point your domain to server IP (A record)
+# 2. Get proper SSL certificate
+sudo certbot certonly --standalone -d yourdomain.com
+
+# 3. Update SSL configuration
+export SSL_CERT_PATH=/etc/letsencrypt/live/yourdomain.com/fullchain.pem
+export SSL_KEY_PATH=/etc/letsencrypt/live/yourdomain.com/privkey.pem
+
+# 4. Restart server
+./setup-https.sh -s
+
+# 5. Test with domain
+curl -X POST https://yourdomain.com:8000/yuwathi/proxy \
+  -H "Content-Type: application/json" \
+  -d '{"URL": "https://httpbin.org/get", "method": "GET"}'
+```
+
+### Troubleshooting External Access
+
+#### Check if Server is Listening on External Interface
+```bash
+# Check listening ports
+sudo netstat -tlnp | grep :8000
+# Should show: 0.0.0.0:8000 (not 127.0.0.1:8000)
+
+# Or use ss command
+sudo ss -tlnp | grep :8000
+```
+
+#### Test Network Connectivity
+```bash
+# From external machine, test if port is reachable
+telnet YOUR_SERVER_IP 8000
+# Or
+nc -zv YOUR_SERVER_IP 8000
+
+# Check if firewall is blocking
+sudo ufw status  # Ubuntu/Debian
+sudo firewall-cmd --list-all  # CentOS/RHEL/Fedora
+```
+
+#### Common External Access Issues
+```bash
+# Issue: Connection refused
+# Solution: Ensure server binds to 0.0.0.0, not 127.0.0.1
+export HOST=0.0.0.0
+
+# Issue: Timeout
+# Solution: Check firewall rules
+sudo ufw allow 8000/tcp
+
+# Issue: SSL certificate warnings
+# Solution: Use proper certificates or instruct clients to ignore warnings
+
+# Issue: Can't reach from internet
+# Solution: Check router/cloud firewall port forwarding
 ```
 
 ### Check Server Status
